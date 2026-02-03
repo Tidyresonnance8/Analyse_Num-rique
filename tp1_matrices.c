@@ -1,5 +1,9 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
+#include <cblas.h>
+
+
 typedef struct {
     double **a;
     double *data;
@@ -47,6 +51,20 @@ int mult_matrix (matrix *A, matrix *B, matrix *C){
     
 
 }
+
+int mult_matrix_blas( matrix *A, matrix *B, matrix *C){
+    if (A->n != B->m) return -1;
+    if (A->m != C->m) return -1;
+    if (B->n != C->n) return -1;
+    
+    cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
+                A->m, B->n, A->n,
+                1.0, A->data, A->n,
+                B->data, B->n,
+                0.0, C->data, C->n);
+    return 0;
+}
+
 int main(void){
     //matrix *mat = allocate_matrix(100,200);
     //if (mat == NULL) return -1;
@@ -62,19 +80,34 @@ int main(void){
     //free_matrix(mat);
     //mat = NULL;
     //return 0;
-    matrix *A = allocate_matrix(3,2);
-    matrix *B = allocate_matrix(2,3);
-    matrix *C = allocate_matrix(2,2);
+    int m = 1000, p = 2000, n = 3000;
+    matrix *A = allocate_matrix(p, m); // n, m dans ta fonction
+    matrix *B = allocate_matrix(n, p);
+    matrix *C = allocate_matrix(n, m);
+    
+    if (!A || !B || !C) return -1;
 
-    for(int i=0; i<6; i++)  A->data[i] = i+1;
-    for(int i=0; i<6; i++)  B->data[i] = 1.0;
+    for(int i=0; i<m*p; i++)  A->data[i] = drand48();
+    for(int i=0; i<p*n; i++)  B->data[i] = drand48();
+    
+    struct timespec start, end;
+    //double total_flops = 2.0 * m * n * p;
 
-    if (mult_matrix(A, B, C) == 0) {
-        printf("Résultat C[0][0] : %f (attendu: 6.0)\n", C->a[0][0]);
-        printf("Résultat C[1][0] : %f (attendu: 15.0)\n", C->a[1][0]);
-    } else {
-        printf("Erreur de dimensions !\n");
-    }
+    // --- TEST VERSION NAÏVE ---
+    clock_gettime(CLOCK_MONOTONIC, &start);
+    mult_matrix(A, B, C);
+    clock_gettime(CLOCK_MONOTONIC, &end);
+    double time_naive = (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e9;
+
+    // --- TEST VERSION BLAS ---
+    clock_gettime(CLOCK_MONOTONIC, &start);
+    mult_matrix_blas(A, B, C);
+    clock_gettime(CLOCK_MONOTONIC, &end);
+    double time_blas = (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e9;
+
+    double total_flops = 2.0 * m * n * p; //
+    printf("Naïf : %f s (%f GFLOPS)\n", time_naive, (total_flops/time_naive)/1e9);
+    printf("BLAS : %f s (%f GFLOPS)\n", time_blas, (total_flops/time_blas)/1e9);
     free_matrix(A);
     free_matrix(B);
     free_matrix(C);
